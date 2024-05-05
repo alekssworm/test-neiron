@@ -1,109 +1,96 @@
 import numpy as np
 
-def relu(x):
-    return np.maximum(0, x)
-
-def sigmoid(x):
-    return 1 / (1 + np.exp(-x))
+class NeuralNetwork:
+    def __init__(self, input_dim, hidden_dims, output_dim, activations):
+        self.input_dim = input_dim
+        self.hidden_dims = hidden_dims
+        self.output_dim = output_dim
+        self.activations = activations
+        
+        self.weights = []
+        self.biases = []
+        
+        layer_dims = [input_dim] + hidden_dims + [output_dim]
+        
+        for i in range(len(layer_dims) - 1):
+            self.weights.append(np.random.randn(layer_dims[i], layer_dims[i+1]))
+            self.biases.append(np.zeros((1, layer_dims[i+1])))
+    
+    def relu(self, x):
+        return np.maximum(0, x)
+    
+    def sigmoid(self, x):
+        return 1 / (1 + np.exp(-x))
+    
+    def forward_pass(self, X):
+        activations = [X]
+        
+        for i in range(len(self.weights)):
+            Z = np.dot(activations[-1], self.weights[i]) + self.biases[i]
+            if self.activations[i] == 'relu':
+                activations.append(self.relu(Z))
+            elif self.activations[i] == 'sigmoid':
+                activations.append(self.sigmoid(Z))
+        
+        return activations
+    
+    def backward_pass(self, X, y, activations, learning_rate):
+        m = X.shape[0]
+        grads_weights = [np.zeros_like(w) for w in self.weights]
+        grads_biases = [np.zeros_like(b) for b in self.biases]
+        
+        error = activations[-1] - y
+        for i in range(len(grads_weights)-1, -1, -1):
+            if self.activations[i] == 'relu':
+                error = np.where(activations[i+1] <= 0, 0, error)
+            elif self.activations[i] == 'sigmoid':
+                error = error * activations[i+1] * (1 - activations[i+1])
+                
+            grads_weights[i] = np.dot(activations[i].T, error) / m
+            grads_biases[i] = np.sum(error, axis=0, keepdims=True) / m
+            
+            error = np.dot(error, self.weights[i].T)
+        
+        for i in range(len(self.weights)):
+            self.weights[i] -= learning_rate * grads_weights[i]
+            self.biases[i] -= learning_rate * grads_biases[i]
+    
+    def train(self, X, y, epochs, batch_size, learning_rate):
+        m = X.shape[0]
+        for epoch in range(epochs):
+            for i in range(0, m, batch_size):
+                batch_X = X[i:i+batch_size]
+                batch_y = y[i:i+batch_size]
+                
+                activations = self.forward_pass(batch_X)
+                self.backward_pass(batch_X, batch_y, activations, learning_rate)
+            
+            if epoch % 100 == 0:
+                loss = self.compute_loss(X, y)
+                print(f'Epoch {epoch}, Loss: {loss}')
+    
+    def compute_loss(self, X, y):
+        activations = self.forward_pass(X)
+        y_pred = activations[-1]
+        return -np.mean(y * np.log(y_pred) + (1 - y) * np.log(1 - y_pred))
+    
+    def predict(self, X):
+        activations = self.forward_pass(X)
+        return activations[-1]
 
 # Задаем данные для обучения
 X_train = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
 y_train = np.array([[0], [1], [1], [0]])
 
-# Инициализируем веса и смещения для каждого слоя
 input_dim = 2
-hidden1_neurons = 8
-hidden2_neurons = 8
-hidden3_neurons = 8
+hidden_dims = [8, 8, 8]
 output_dim = 1
+activations = ['relu', 'relu', 'relu', 'sigmoid']
 
-# Веса и смещения для первого скрытого слоя
-W1 = np.random.randn(input_dim, hidden1_neurons)
-b1 = np.zeros((1, hidden1_neurons))
-
-# Веса и смещения для второго скрытого слоя
-W2 = np.random.randn(hidden1_neurons, hidden2_neurons)
-b2 = np.zeros((1, hidden2_neurons))
-
-# Веса и смещения для третьего скрытого слоя
-W3 = np.random.randn(hidden2_neurons, hidden3_neurons)
-b3 = np.zeros((1, hidden3_neurons))
-
-# Веса и смещения для выходного слоя
-W4 = np.random.randn(hidden3_neurons, output_dim)
-b4 = np.zeros((1, output_dim))
-
-# Проходим по слоям нейронной сети
-def forward_pass(X):
-    # Первый скрытый слой
-    global Z1, A1
-    Z1 = np.dot(X, W1) + b1
-    A1 = relu(Z1)
-
-    # Второй скрытый слой
-    global Z2, A2
-    Z2 = np.dot(A1, W2) + b2
-    A2 = relu(Z2)
-
-    # Третий скрытый слой
-    global Z3, A3
-    Z3 = np.dot(A2, W3) + b3
-    A3 = relu(Z3)
-
-    # Выходной слой
-    global Z4, y_pred
-    Z4 = np.dot(A3, W4) + b4
-    y_pred = sigmoid(Z4)
-
-    return y_pred
-
-# Обучаем модель
-def train(X, y, epochs, learning_rate):
-    global W4, b4, W3, b3, W2, b2, W1, b1
-    for epoch in range(epochs):
-        # Прямой проход
-        y_pred = forward_pass(X)
-
-        # Вычисляем ошибку
-        loss = -np.mean(y * np.log(y_pred) + (1 - y) * np.log(1 - y_pred))
-
-        # Обратное распространение ошибки
-        dZ4 = y_pred - y
-        dW4 = np.dot(A3.T, dZ4)
-        db4 = np.sum(dZ4, axis=0, keepdims=True)
-
-        dA3 = np.dot(dZ4, W4.T)
-        dZ3 = dA3 * (Z3 > 0)
-        dW3 = np.dot(A2.T, dZ3)
-        db3 = np.sum(dZ3, axis=0, keepdims=True)
-
-        dA2 = np.dot(dZ3, W3.T)
-        dZ2 = dA2 * (Z2 > 0)
-        dW2 = np.dot(A1.T, dZ2)
-        db2 = np.sum(dZ2, axis=0, keepdims=True)
-
-        dA1 = np.dot(dZ2, W2.T)
-        dZ1 = dA1 * (Z1 > 0)
-        dW1 = np.dot(X.T, dZ1)
-        db1 = np.sum(dZ1, axis=0, keepdims=True)
-
-        # Обновляем веса
-        W4 -= learning_rate * dW4
-        b4 -= learning_rate * db4
-        W3 -= learning_rate * dW3
-        b3 -= learning_rate * db3
-        W2 -= learning_rate * dW2
-        b2 -= learning_rate * db2
-        W1 -= learning_rate * dW1
-        b1 -= learning_rate * db1
-
-        # Выводим значение функции потерь на каждой итерации
-        if epoch % 100 == 0:
-            print(f'Epoch {epoch}, Loss: {loss}')
-
-# Обучаем модель
-train(X_train, y_train, epochs=1000, learning_rate=0.01)
+# Создаем и обучаем модель
+model = NeuralNetwork(input_dim, hidden_dims, output_dim, activations)
+model.train(X_train, y_train, epochs=1000, batch_size=4, learning_rate=0.01)
 
 # Предсказываем результаты
-predictions = forward_pass(X_train)
+predictions = model.predict(X_train)
 print(predictions)
